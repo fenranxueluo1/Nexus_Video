@@ -140,7 +140,7 @@ class _WorkspaceShellState extends State<WorkspaceShell>
             ),
           ),
           const SizedBox(width: 10),
-          const Text('Nexus'),
+          const Text('Nexus视频下载器'),
         ],
       ),
       actions: [

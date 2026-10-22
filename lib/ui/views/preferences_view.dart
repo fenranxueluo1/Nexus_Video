@@ -1059,7 +1059,7 @@ class _PreferencesViewState extends State<PreferencesView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const DetailRow(label: '应用', value: 'Nexus 0.1.0 · Flutter'),
+          const DetailRow(label: '应用', value: 'Nexus视频下载器 0.1.0 · Flutter'),
           DetailRow(
             label: '应用数据',
             value: StoragePaths.dataDir.path,
@@ -1098,7 +1098,7 @@ class _PreferencesViewState extends State<PreferencesView> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Nexus 与哔哩哔哩无隶属关系。请仅保存你有权使用的内容。',
+            'Nexus视频下载器 与哔哩哔哩无隶属关系。请仅保存你有权使用的内容。',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),

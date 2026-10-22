@@ -76,7 +76,7 @@ class _NexusWorkspaceState extends State<NexusApp> {
                   children: [
                     CircularProgressIndicator(),
                     SizedBox(height: 16),
-                    Text('正在加载 Nexus…'),
+                    Text('正在加载 Nexus视频下载器…'),
                   ],
                 ),
               ),
@@ -102,7 +102,7 @@ class _NexusRoot extends StatelessWidget {
         listenable: state,
         builder: (context, _) {
           return MaterialApp(
-            title: 'Nexus',
+            title: 'Nexus视频下载器',
             debugShowCheckedModeBanner: false,
             theme: buildAppTheme(Brightness.light),
             darkTheme: buildAppTheme(Brightness.dark),

@@ -1,4 +1,4 @@
-# Nexus Video
+# Nexus视频下载器
 
 基于 Flutter 的哔哩哔哩、YouTube、X（Twitter）与抖音媒体解析与归档工具。
 
@@ -48,7 +48,7 @@
 
 ### 直接使用
 
-下载 `NexusDownload-Windows-x64.zip`，解压后运行 `nexus_video.exe`。
+下载 `Nexus视频下载器-Windows-x64.zip`，解压后运行 `Nexus视频下载器.exe`。
 
 发布包已经内置：
 
@@ -78,7 +78,7 @@ flutter build windows --release
 powershell -ExecutionPolicy Bypass -File scripts\package_windows.ps1
 ```
 
-打包脚本会下载或复用 FFmpeg、yt-dlp、Deno，并生成 `dist/NexusDownload-Windows-x64.zip`。
+打包脚本会下载或复用 FFmpeg、yt-dlp、Deno，并生成 `dist/Nexus视频下载器-Windows-x64.zip`。
 
 签名说明见下方“Windows 代码签名”。
 
@@ -124,7 +124,7 @@ chmod +x scripts/package_linux.sh
 ./scripts/package_linux.sh
 ```
 
-生成 `dist/NexusDownload-Linux-<arch>.tar.gz`，解压后运行 `nexus_video`。
+生成 `dist/Nexus视频下载器-Linux-<arch>.tar.gz`，解压后运行 `nexus_video`。
 
 Linux 仍需要系统提供 GTK3、GLib、libstdc++ 等 Flutter Linux 运行库。Ubuntu/Debian 可安装：
 

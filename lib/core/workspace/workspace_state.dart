@@ -557,7 +557,7 @@ class WorkspaceState extends ChangeNotifier {
       journalBuffer.writeln();
     }
     final payload = const JsonEncoder.withIndent('  ').convert({
-      'app': 'Nexus',
+      'app': 'Nexus视频下载器',
       'version': '0.1.0',
       'platform': Platform.operatingSystem,
       'generatedAt': DateTime.now().toIso8601String(),

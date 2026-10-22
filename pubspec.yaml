@@ -1,5 +1,5 @@
 name: nexus_video
-description: "Nexus Video - a local-first Bilibili, YouTube, X, and Douyin media collector with HarmonyOS support."
+description: "Nexus视频下载器 - 支持 Bilibili、YouTube、X、抖音与 HarmonyOS 的本地媒体下载与归档工具。"
 publish_to: 'none'
 version: 0.1.0+1
 
