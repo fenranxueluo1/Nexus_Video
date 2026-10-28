@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 
 import '../api/service_exception.dart';
 import '../api/bili_gateway.dart';
+import '../compose/job_composer.dart';
 import '../transfer/throughput_governor.dart';
 import '../transfer/asset_receiver.dart';
 import '../postprocess/comment_overlay.dart';
@@ -24,11 +25,13 @@ import '../util/privacy.dart';
 class TransferCoordinator extends ChangeNotifier {
   TransferCoordinator({
     required this.client,
+    required this.composer,
     required this.preferencesRepository,
     required this.jobRepository,
   });
 
   final BiliGateway client;
+  final JobComposer composer;
   final PreferencesRepository preferencesRepository;
   final JobRepository jobRepository;
 
@@ -515,25 +518,48 @@ class TransferCoordinator extends ChangeNotifier {
           jobId,
           () => RateGate(const Duration(milliseconds: 150)),
         );
-        final outcome = await _fetcher.receive(
-          asset: asset,
-          token: token,
-          taskLimiter: taskLimiter,
-          onProgress: (downloaded, total) {
-            if (!throttler.ready) {
-              return;
-            }
-            _updateResource(
-              jobId,
-              asset.id,
-              (current) => current.copyWith(
-                receivedBytes: downloaded,
-                expectedBytes: total ?? current.expectedBytes,
-              ),
-            );
-            _notify();
-          },
-        );
+        Future<ReceiveResult> fetch(JobAsset target) {
+          return _fetcher.receive(
+            asset: target,
+            token: token,
+            taskLimiter: taskLimiter,
+            onProgress: (downloaded, total) {
+              if (!throttler.ready) {
+                return;
+              }
+              _updateResource(
+                jobId,
+                target.id,
+                (current) => current.copyWith(
+                  receivedBytes: downloaded,
+                  expectedBytes: total ?? current.expectedBytes,
+                ),
+              );
+              _notify();
+            },
+          );
+        }
+
+        ReceiveResult outcome;
+        try {
+          outcome = await fetch(asset);
+        } on ApiException catch (error) {
+          if (!_isDeadUrlError(error)) {
+            rethrow;
+          }
+          JobAsset? refreshed;
+          try {
+            await _refreshMediaUrls(jobId);
+            refreshed = _assetById(jobId, asset.id);
+          } on ApiException {
+            refreshed = null;
+          }
+          if (refreshed == null) {
+            rethrow;
+          }
+          _log(jobId, '资源地址已失效，已重新解析播放地址');
+          outcome = await fetch(refreshed);
+        }
         _updateResource(
           jobId,
           asset.id,
@@ -913,6 +939,49 @@ class TransferCoordinator extends ChangeNotifier {
   JobAsset? _completedResource(TransferJob job, AssetRole role) {
     for (final asset in job.assets) {
       if (asset.role == role && asset.state == AssetState.ready) {
+        return asset;
+      }
+    }
+    return null;
+  }
+
+  bool _isDeadUrlError(ApiException error) {
+    final status = error.statusCode;
+    return status == 403 || status == 404 || status == 410;
+  }
+
+  Future<void> _refreshMediaUrls(String jobId) async {
+    final job = _taskById(jobId);
+    if (job == null) {
+      throw const ApiException('任务已不存在，无法重新解析播放地址。');
+    }
+    final refreshed = await composer.refreshMediaUrls(job);
+    if (refreshed == null) {
+      throw const ApiException('无法重新解析播放地址。');
+    }
+    final latest = _taskById(jobId);
+    if (latest == null) {
+      return;
+    }
+    final freshUrls = {for (final asset in refreshed) asset.id: asset.urls};
+    final assets = latest.assets.map((asset) {
+      final urls = freshUrls[asset.id];
+      if (urls == null || urls.isEmpty) {
+        return asset;
+      }
+      return asset.copyWith(urls: urls);
+    }).toList();
+    _updateTask(latest.copyWith(assets: assets, updatedAt: DateTime.now()));
+    _notify(true);
+  }
+
+  JobAsset? _assetById(String jobId, String assetId) {
+    final job = _taskById(jobId);
+    if (job == null) {
+      return null;
+    }
+    for (final asset in job.assets) {
+      if (asset.id == assetId) {
         return asset;
       }
     }

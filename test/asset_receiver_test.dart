@@ -17,6 +17,7 @@ class _RangeServer {
   final List<String?> ranges = [];
   bool ignoreRange = false;
   bool corruptRange = false;
+  int? headStatus;
   String etag = '"etag-1"';
 
   static Future<_RangeServer> start(Uint8List data) async {
@@ -33,6 +34,12 @@ class _RangeServer {
     response.headers.set('etag', etag);
     response.headers.set('accept-ranges', 'bytes');
     if (request.method == 'HEAD') {
+      final status = headStatus;
+      if (status != null) {
+        response.statusCode = status;
+        response.close();
+        return;
+      }
       response.contentLength = data.length;
       response.close();
       return;
@@ -223,6 +230,29 @@ void main() {
     final receiver = AssetReceiver(http, retryLimit: 0, parallelSegments: 1);
     await receiver.receive(asset: asset, token: TaskToken());
 
+    expect(
+      await File(asset.destinationPath).readAsBytes(),
+      orderedEquals(data),
+    );
+  });
+
+  test('falls back to a ranged GET when the CDN rejects HEAD', () async {
+    final data = _sampleData(64000);
+    final server = await _RangeServer.start(data);
+    server.headStatus = HttpStatus.notFound;
+    final dir = Directory.systemTemp.createTempSync('nexus-head-');
+    final http = BiliTransport();
+    addTearDown(() async {
+      http.close();
+      await server.close();
+      dir.deleteSync(recursive: true);
+    });
+
+    final receiver = AssetReceiver(http, retryLimit: 0, parallelSegments: 1);
+    final asset = _resource(dir, server.url);
+    final outcome = await receiver.receive(asset: asset, token: TaskToken());
+
+    expect(outcome.bytes, data.length);
     expect(
       await File(asset.destinationPath).readAsBytes(),
       orderedEquals(data),

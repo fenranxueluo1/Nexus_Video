@@ -214,25 +214,11 @@ class AssetReceiver {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         return _metadataFromHeaders(response.headers, null);
       }
-      if (response.statusCode != 403 &&
-          response.statusCode != 405 &&
-          response.statusCode != 400) {
-        throw ApiException(
-          '资源地址不可用：HTTP ${response.statusCode}',
-          statusCode: response.statusCode,
-        );
-      }
-    } on ApiException catch (error) {
-      if (error.statusCode != null &&
-          error.statusCode != 403 &&
-          error.statusCode != 405 &&
-          error.statusCode != 400) {
-        rethrow;
-      }
     } on SocketException catch (error) {
       throw ApiException('连接资源服务器失败：${error.message}');
     }
 
+    // 部分 CDN 节点（如 B 站 PCDN 镜像）对 HEAD 返回 404，但 GET 正常。
     token.throwIfCancelled();
     final request = await http.open(
       'GET',

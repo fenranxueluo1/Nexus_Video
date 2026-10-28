@@ -11,6 +11,7 @@ import '../domain/catalog.dart';
 import '../domain/jobs.dart';
 import '../pathing/path_template.dart';
 import '../util/identifiers.dart';
+import '../util/platform_support.dart';
 
 class PickedTrack {
   const PickedTrack({required this.item, required this.track});
@@ -123,10 +124,11 @@ class JobComposer {
     required List<BuildSkip> skipped,
   }) async {
     final profile = options.profile;
-    if ((Platform.isIOS || Platform.isAndroid) && profile.producesMedia) {
+    if (isMobileLike && profile.producesMedia) {
       final supportedContainer =
           profile.container == OutputContainer.mp4 ||
-          profile.container == OutputContainer.m4a;
+          profile.container == OutputContainer.m4a ||
+          (isHarmony && profile.container == OutputContainer.mkv);
       if (!supportedContainer ||
           profile.embedCaptions ||
           profile.embedArtwork) {
@@ -146,9 +148,17 @@ class JobComposer {
     }
 
     final resolved = await _resolveCid(catalogKind, track);
-    final playInfo = await _loadStreamManifest(catalogKind, resolved, options);
+    final playInfo = await _loadStreamManifest(
+      catalogKind,
+      resolved,
+      options.effectiveQuality,
+    );
     var videoStream = profile.includeVideo
-        ? _selectVideo(playInfo.videoStreams, options)
+        ? _selectVideo(
+            playInfo.videoStreams,
+            options.effectiveQuality,
+            options.effectiveCodec,
+          )
         : null;
     var audioStream = profile.includeAudio
         ? _selectAudio(playInfo.audioStreams)
@@ -158,13 +168,38 @@ class JobComposer {
           .where((stream) => stream.isCombined)
           .toList();
       if (muxed.isNotEmpty) {
-        final combined = _selectVideo(muxed, options) ?? muxed.first;
+        final combined =
+            _selectVideo(
+              muxed,
+              options.effectiveQuality,
+              options.effectiveCodec,
+            ) ??
+            muxed.first;
         if (profile.includeVideo) {
           videoStream = combined;
         } else {
           audioStream = combined;
         }
       }
+    }
+    if (isHarmony &&
+        profile.includeVideo &&
+        profile.includeAudio &&
+        !(videoStream?.isCombined ?? false)) {
+      final muxed = playInfo.videoStreams
+          .where((stream) => stream.isCombined)
+          .toList();
+      if (muxed.isEmpty) {
+        throw const ApiException('该视频没有可直接下载的合并流，鸿蒙端暂不支持独立音视频合并。');
+      }
+      videoStream =
+          _selectVideo(
+            muxed,
+            options.effectiveQuality,
+            options.effectiveCodec,
+          ) ??
+          muxed.first;
+      audioStream = null;
     }
     final missingAudio =
         profile.includeAudio &&
@@ -414,9 +449,9 @@ class JobComposer {
   Future<StreamManifest> _loadStreamManifest(
     CatalogKind catalogKind,
     CatalogTrack track,
-    BuildOptions options,
+    String quality,
   ) async {
-    final qn = _qnForPreference(options.effectiveQuality);
+    final qn = _qnForPreference(quality);
     switch (catalogKind) {
       case CatalogKind.bangumi:
         if (track.epId == null || track.cid == null) {
@@ -440,6 +475,65 @@ class JobComposer {
     }
   }
 
+  /// Re-resolves the media URLs of an existing task.
+  ///
+  /// Bilibili signs stream URLs with a short lifetime and picks CDN mirrors
+  /// that sometimes answer 404, so stored URLs cannot be reused by a retry.
+  Future<List<JobAsset>?> refreshMediaUrls(TransferJob job) async {
+    final kind = job.catalogKind;
+    if (kind == CatalogKind.tube ||
+        kind == CatalogKind.chirp ||
+        kind == CatalogKind.douyin) {
+      return null;
+    }
+    final track = job.track;
+    if (track.cid == null || track.cid! <= 0) {
+      return null;
+    }
+    if (!job.assets.any(
+      (asset) => asset.role == AssetRole.video || asset.role == AssetRole.audio,
+    )) {
+      return null;
+    }
+    final manifest = await _loadStreamManifest(kind, track, job.recipe.quality);
+    final hasVideoAsset = job.assets.any(
+      (asset) => asset.role == AssetRole.video,
+    );
+    final hasAudioAsset = job.assets.any(
+      (asset) => asset.role == AssetRole.audio,
+    );
+    final video = hasVideoAsset
+        ? _selectVideo(
+            manifest.videoStreams,
+            job.recipe.quality,
+            job.recipe.codec,
+          )
+        : null;
+    var audio = hasAudioAsset ? _selectAudio(manifest.audioStreams) : null;
+    if (hasAudioAsset && audio == null) {
+      final muxed = manifest.videoStreams
+          .where((stream) => stream.isCombined)
+          .toList();
+      if (muxed.isNotEmpty) {
+        audio =
+            _selectVideo(muxed, job.recipe.quality, job.recipe.codec) ??
+            muxed.first;
+      }
+    }
+    if ((hasVideoAsset && video == null) || (hasAudioAsset && audio == null)) {
+      return null;
+    }
+    return [
+      for (final asset in job.assets)
+        if (asset.role == AssetRole.video && video != null)
+          asset.copyWith(urls: video.urls)
+        else if (asset.role == AssetRole.audio && audio != null)
+          asset.copyWith(urls: audio.urls)
+        else
+          asset,
+    ];
+  }
+
   int _qnForPreference(String preference) {
     final numeric = int.tryParse(preference);
     if (numeric != null && numeric > 0) {
@@ -453,13 +547,12 @@ class JobComposer {
 
   StreamVariant? _selectVideo(
     List<StreamVariant> streams,
-    BuildOptions options,
+    String preference,
+    String codecPreference,
   ) {
     if (streams.isEmpty) {
       return null;
     }
-    final preference = options.effectiveQuality;
-    final codecPreference = options.effectiveCodec;
     final sorted = List<StreamVariant>.of(streams)
       ..sort((left, right) {
         final height = right.height.compareTo(left.height);
@@ -559,6 +652,9 @@ class JobComposer {
     required bool hasVideo,
     required bool hasAudio,
   }) {
+    if (isHarmony) {
+      return hasVideo ? OutputContainer.mp4 : OutputContainer.m4a;
+    }
     if (hasVideo && hasAudio) {
       return profile.container == OutputContainer.mkv
           ? OutputContainer.mkv

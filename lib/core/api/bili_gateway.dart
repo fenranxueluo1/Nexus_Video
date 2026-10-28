@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import '../domain/streams.dart';
+import '../util/platform_support.dart';
 import 'bili_transport.dart';
 import 'request_signer.dart';
 import 'service_exception.dart';
@@ -420,6 +421,12 @@ class BiliGateway {
       'platform': 'pc',
     };
     const base = 'https://api.bilibili.com/x/player/playurl';
+    if (isHarmony) {
+      final combined = await _combinedFallback(base, params);
+      if (combined != null) {
+        return combined;
+      }
+    }
     StreamManifest? info;
     try {
       info = parseStreamManifest(
@@ -454,6 +461,29 @@ class BiliGateway {
       );
     }
     return info;
+  }
+
+  Future<StreamManifest?> _combinedFallback(
+    String base,
+    Map<String, Object?> params,
+  ) async {
+    try {
+      final data = await http.getJson(_query(base, {...params, 'fnval': 0}));
+      final fallback = parseStreamManifest(data);
+      final muxed =
+          fallback.videoStreams.where((stream) => stream.isCombined).toList()
+            ..sort((left, right) => right.bandwidth.compareTo(left.bandwidth));
+      if (muxed.isEmpty) {
+        return null;
+      }
+      return StreamManifest(
+        videoStreams: [muxed.first],
+        durationMs: fallback.durationMs,
+        acceptQuality: fallback.acceptQuality,
+      );
+    } on Object {
+      return null;
+    }
   }
 
   Future<StreamManifest?> _durlFallback(
@@ -501,6 +531,12 @@ class BiliGateway {
       'platform': 'pc',
     };
     const base = 'https://api.bilibili.com/pgc/player/web/playurl';
+    if (isHarmony) {
+      final combined = await _combinedFallback(base, params);
+      if (combined != null) {
+        return combined;
+      }
+    }
     try {
       var info = parseStreamManifest(await http.getJson(_query(base, params)));
       if (info.videoStreams.isNotEmpty && info.audioStreams.isEmpty) {
@@ -534,6 +570,12 @@ class BiliGateway {
       'platform': 'pc',
     };
     const base = 'https://api.bilibili.com/pugv/player/web/playurl';
+    if (isHarmony) {
+      final combined = await _combinedFallback(base, params);
+      if (combined != null) {
+        return combined;
+      }
+    }
     try {
       var info = parseStreamManifest(await http.getJson(_query(base, params)));
       if (info.videoStreams.isNotEmpty && info.audioStreams.isEmpty) {

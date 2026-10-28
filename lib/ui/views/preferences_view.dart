@@ -1059,7 +1059,7 @@ class _PreferencesViewState extends State<PreferencesView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const DetailRow(label: '应用', value: 'Nexus视频下载器 0.1.0 · Flutter'),
+          const DetailRow(label: '应用', value: 'Nexus视频下载器 0.1.1 · Flutter'),
           DetailRow(
             label: '应用数据',
             value: StoragePaths.dataDir.path,

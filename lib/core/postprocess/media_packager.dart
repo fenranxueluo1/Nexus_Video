@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../api/service_exception.dart';
 import '../domain/output_profile.dart';
+import '../util/platform_support.dart';
 import '../util/task_token.dart';
 
 class PackagerProbe {
@@ -39,6 +40,13 @@ class MediaPackager {
   set packagerPath(String value) => _ffmpegPath = value.trim();
 
   Future<PackagerProbe> probe() async {
+    if (isHarmony) {
+      return const PackagerProbe(
+        available: false,
+        path: 'HarmonyOS',
+        error: '鸿蒙端暂不支持独立音视频合并，请使用可直接下载的合并流。',
+      );
+    }
     if (Platform.isIOS || Platform.isAndroid) {
       final label = Platform.isIOS ? 'AVFoundation' : 'Android MediaMuxer';
       return PackagerProbe(available: true, path: label, version: label);
@@ -116,6 +124,11 @@ class MediaPackager {
     token?.throwIfCancelled();
     if (videoPath == null && audioPath == null) {
       throw const ApiException('没有可合并的音视频流。');
+    }
+    if (isHarmony) {
+      throw const ApiException(
+        '鸿蒙端暂不支持独立音视频合并，请使用可直接下载的合并流。',
+      );
     }
     if (Platform.isIOS || Platform.isAndroid) {
       if (embedArtwork || embedCaptions) {

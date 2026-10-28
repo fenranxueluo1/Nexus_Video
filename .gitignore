@@ -71,3 +71,4 @@ key.properties
 *.pem
 .env
 
+.commandcode

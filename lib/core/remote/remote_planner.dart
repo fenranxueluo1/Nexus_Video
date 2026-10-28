@@ -10,6 +10,7 @@ import '../domain/output_profile.dart';
 import '../domain/preferences.dart';
 import '../pathing/path_template.dart';
 import '../util/identifiers.dart';
+import '../util/platform_support.dart';
 import 'chirp_gateway.dart';
 import 'douyin_gateway.dart';
 import 'remote_models.dart';
@@ -72,10 +73,11 @@ class RemoteJobPlanner {
     required List<BuildSkip> skipped,
   }) async {
     final profile = options.profile;
-    if ((Platform.isAndroid || Platform.isIOS) && profile.producesMedia) {
+    if (isMobileLike && profile.producesMedia) {
       final supported =
           profile.container == OutputContainer.mp4 ||
-          profile.container == OutputContainer.m4a;
+          profile.container == OutputContainer.m4a ||
+          (isHarmony && profile.container == OutputContainer.mkv);
       if (!supported || profile.embedCaptions || profile.embedArtwork) {
         throw const ApiException(
           '移动端目前只支持合并为 MP4/M4A，暂不支持 MKV、MP3、FLAC、字幕嵌入或封面嵌入。',
@@ -149,6 +151,18 @@ class RemoteJobPlanner {
       combined = true;
     }
 
+    if (isHarmony && profile.includeVideo && profile.includeAudio) {
+      final fallback = _pickVideo(streams.muxed, options);
+      if (fallback == null) {
+        throw const ApiException(
+          '该视频没有可直接下载的合并流，鸿蒙端暂不支持独立音视频合并。',
+        );
+      }
+      video = fallback;
+      audio = null;
+      combined = true;
+    }
+
     if (profile.includeVideo && video == null) {
       throw const ApiException('没有找到可用的 MP4 视频流，请更换清晰度或代理。');
     }
@@ -166,8 +180,7 @@ class RemoteJobPlanner {
       hasVideo: video != null,
       hasAudio: audio != null,
     );
-    if ((Platform.isAndroid || Platform.isIOS) &&
-        container == OutputContainer.mkv) {
+    if (isMobileLike && container == OutputContainer.mkv) {
       throw const ApiException('该视频只有 WebM/VP9 格式，移动端暂不支持，请在桌面端下载。');
     }
     final extension = container.extension;
@@ -459,6 +472,9 @@ class RemoteJobPlanner {
     required bool hasVideo,
     required bool hasAudio,
   }) {
+    if (isHarmony) {
+      return hasVideo ? OutputContainer.mp4 : OutputContainer.m4a;
+    }
     final webmVideo =
         video != null &&
         (video.container == 'webm' ||

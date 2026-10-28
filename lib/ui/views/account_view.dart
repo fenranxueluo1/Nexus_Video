@@ -592,15 +592,24 @@ class _QrLoginDialogState extends State<_QrLoginDialog> {
       _status = '正在获取二维码…';
     });
     try {
-      final ticket = await widget.state.startQrLogin();
+      final ticket = await widget.state
+          .startQrLogin()
+          .timeout(const Duration(seconds: 15));
       if (!mounted) {
         return;
+      }
+      if (ticket.url.trim().isEmpty || ticket.key.trim().isEmpty) {
+        throw const ApiException('二维码数据为空，请重试。');
       }
       setState(() {
         _ticket = ticket;
         _status = '请使用哔哩哔哩客户端扫码';
       });
       _timer = Timer.periodic(const Duration(seconds: 2), (_) => _poll());
+    } on TimeoutException {
+      if (mounted) {
+        setState(() => _status = '获取二维码超时，请检查网络或代理');
+      }
     } on ApiException catch (error) {
       if (mounted) {
         setState(() => _status = '获取失败：${error.message}');
@@ -619,7 +628,9 @@ class _QrLoginDialogState extends State<_QrLoginDialog> {
     }
     _polling = true;
     try {
-      final result = await widget.state.pollQrLogin(ticket.key);
+      final result = await widget.state
+          .pollQrLogin(ticket.key)
+          .timeout(const Duration(seconds: 10));
       if (!mounted) {
         return;
       }
@@ -644,6 +655,10 @@ class _QrLoginDialogState extends State<_QrLoginDialog> {
             ? '已扫码，请在手机上确认登录'
             : (result.message.isEmpty ? '等待扫码…' : result.message);
       });
+    } on TimeoutException {
+      if (mounted) {
+        setState(() => _status = '查询超时，请检查网络或代理');
+      }
     } on ApiException catch (error) {
       if (mounted) {
         setState(() => _status = '查询失败：${error.message}');

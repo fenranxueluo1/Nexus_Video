@@ -51,11 +51,11 @@ class WorkspaceState extends ChangeNotifier {
     required this.jobRepository,
     required this.credentialVault,
     required this.client,
+    required this.composer,
     required this.preferences,
     required this.coordinator,
     required this.effectiveProxy,
-  }) : intake = CatalogIntake(client),
-       composer = JobComposer(client) {
+  }) : intake = CatalogIntake(client) {
     tubeGateway = TubeGateway(
       proxy: effectiveProxy,
       cookiePath: preferences.tubeCookiePath,
@@ -140,8 +140,10 @@ class WorkspaceState extends ChangeNotifier {
       preferences.douyinCookiePath,
     );
     final jobRepository = JobRepository();
+    final composer = JobComposer(client);
     final coordinator = TransferCoordinator(
       client: client,
+      composer: composer,
       preferencesRepository: preferencesRepository,
       jobRepository: jobRepository,
     );
@@ -151,6 +153,7 @@ class WorkspaceState extends ChangeNotifier {
       jobRepository: jobRepository,
       credentialVault: credentialVault,
       client: client,
+      composer: composer,
       preferences: preferences,
       coordinator: coordinator,
       effectiveProxy: effectiveProxy,
@@ -558,7 +561,7 @@ class WorkspaceState extends ChangeNotifier {
     }
     final payload = const JsonEncoder.withIndent('  ').convert({
       'app': 'Nexus视频下载器',
-      'version': '0.1.0',
+      'version': '0.1.1',
       'platform': Platform.operatingSystem,
       'generatedAt': DateTime.now().toIso8601String(),
       'preferences': settingsJson,
